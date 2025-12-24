@@ -5,85 +5,93 @@ import json
 import os
 from fpdf import FPDF
 
-# 1. PAGE CONFIG
-st.set_page_config(page_title="EcoScan Pro: Salmiya", page_icon="🌱", layout="wide")
+# 1. PAGE CONFIG (Updated for Kuwait)
+st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼", layout="wide")
 
 # --- Database & Config ---
 DB_FILE = "items_db.json"
+# Updated Recycling Centers for different areas in Kuwait
 RECYCLING_CENTERS = [
-    {"name": "Salmiya Block 4 Drop-off", "user": "OFFICIAL CENTER", "lat": 29.3325, "lon": 48.0680, "eco": 0, "cat": "Recycling"},
-    {"name": "Salmiya Co-op Collection", "user": "OFFICIAL CENTER", "lat": 29.3415, "lon": 48.0730, "eco": 0, "cat": "Recycling"}
+    {"name": "Salmiya Collection Point", "user": "OFFICIAL", "lat": 29.3325, "lon": 48.0680, "cat": "Recycling", "area": "Hawalli"},
+    {"name": "Shuwaikh Industrial Center", "user": "OFFICIAL", "lat": 29.3500, "lon": 47.9500, "cat": "Recycling", "area": "Asimah"},
+    {"name": "Ahmadi Eco-Hub", "user": "OFFICIAL", "lat": 29.0761, "lon": 48.0838, "cat": "Recycling", "area": "Ahmadi"}
 ]
+
+KUWAIT_AREAS = ["Asimah", "Hawalli", "Farwaniya", "Mubarak Al-Kabeer", "Ahmadi", "Jahra"]
 
 def load_data():
     user_data = []
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f: user_data = json.load(f)
     if not user_data:
-        user_data = [
-            {"name": "Bicycle", "user": "Fatima", "lat": 29.3375, "lon": 48.0750, "eco": "50kg", "cat": "Sports"},
-            {"name": "Bookshelf", "user": "Ali", "lat": 29.3420, "lon": 48.0820, "eco": "30kg", "cat": "Furniture"}
-        ]
+        user_data = [{"name": "Water Cooler", "user": "Zaid", "lat": 29.3759, "lon": 47.9774, "eco": "40kg", "cat": "Electronics", "area": "Asimah"}]
     return user_data + RECYCLING_CENTERS
 
-def save_item(name, user, lat, lon, eco, cat):
+def save_item(name, user, lat, lon, eco, cat, area):
     current_data = []
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f: current_data = json.load(f)
-    current_data.append({"name": name, "user": user, "lat": lat, "lon": lon, "eco": eco, "cat": cat})
+    current_data.append({"name": name, "user": user, "lat": lat, "lon": lon, "eco": eco, "cat": cat, "area": area})
     with open(DB_FILE, "w") as f: json.dump(current_data, f)
 
-# --- Logic: Search & Filter ---
+# --- Logic: Search & Filters ---
 full_data = load_data()
-user_items = [d for d in full_data if d['user'] != "OFFICIAL CENTER"]
+user_items = [d for d in full_data if d['user'] != "OFFICIAL"]
 
-# Sidebar Search & Filter
-st.sidebar.title("🌍 Salmiya Impact")
-search_query = st.sidebar.text_input("🔍 Search items (e.g. 'bike')", "").lower()
-selected_cat = st.sidebar.selectbox("Category:", ["All", "Furniture", "Electronics", "Clothes", "Sports", "Recycling"])
+st.sidebar.title("🇰🇼 Kuwait Eco-Impact")
+search_query = st.sidebar.text_input("🔍 Search items", "").lower()
+selected_area = st.sidebar.selectbox("Filter by Governorate:", ["All Kuwait"] + KUWAIT_AREAS)
 
-# Apply Search and Category Filters
+# Filter Logic
 filtered_data = [
     d for d in full_data 
     if (search_query in d['name'].lower()) and 
-    (selected_cat == "All" or d['cat'] == selected_cat)
+    (selected_area == "All Kuwait" or d.get('area') == selected_area)
 ]
 
-# --- Sidebar Metrics ---
-leaderboard_df = pd.DataFrame(user_items)
-leaderboard_df['eco_num'] = leaderboard_df['eco'].apply(lambda x: int(str(x).replace('kg','')))
-ranking = leaderboard_df.groupby('user')['eco_num'].sum().sort_values(ascending=False).reset_index()
-total_saved = 5120 + ranking['eco_num'].sum()
-st.sidebar.metric(label="Neighborhood Total", value=f"{total_saved} kg")
-
 # --- Main App ---
-st.title("🌱 EcoScan & Swap")
-t1, t2, t3, t4, t5 = st.tabs(["📤 Scan", "📍 Map", "📱 Feed", "🏆 Leaderboard", "📜 Certificate"])
+st.title("🌱 EcoScan & Swap: Kuwait")
+t1, t2, t3, t4 = st.tabs(["📤 Post Item", "📍 Kuwait Map", "📱 National Feed", "🏆 Rankings"])
 
 with t1:
-    st.subheader("Post an Item")
-    item_cat = st.selectbox("Category", ["Furniture", "Electronics", "Clothes", "Sports"])
-    up = st.file_uploader("Scan item photo", type=["jpg", "png", "jpeg"])
-    if up:
-        if st.button("Confirm & Post"):
-            save_item(up.name.split('.')[0], "You", 29.33 + (len(user_items)*0.005), 48.07 + (len(user_items)*0.005), "10kg", item_cat)
-            st.success("Item posted!")
-            st.balloons()
+    st.subheader("Contribute to Kuwait's Green Future")
+    col1, col2 = st.columns(2)
+    with col1:
+        item_cat = st.selectbox("Category", ["Furniture", "Electronics", "Clothes", "Sports"])
+        user_area = st.selectbox("Your Location", KUWAIT_AREAS)
+    with col2:
+        up = st.file_uploader("Scan item photo", type=["jpg", "png", "jpeg"])
+    
+    if up and st.button("Post to Kuwait Feed"):
+        # Map centering coordinates for the selected area (simplified for demo)
+        area_coords = {"Asimah": (29.37, 47.97), "Hawalli": (29.33, 48.06), "Ahmadi": (29.07, 48.08)}
+        lat, lon = area_coords.get(user_area, (29.31, 47.48))
+        save_item(up.name.split('.')[0], "You", lat, lon, "10kg", item_cat, user_area)
+        st.success(f"Success! Your item is live in {user_area}.")
+        st.balloons()
 
 with t2:
-    st.subheader(f"Map Results: '{search_query}'")
+    st.subheader(f"Eco-Map: {selected_area}")
     if filtered_data:
         map_df = pd.DataFrame(filtered_data)
-        map_df['color'] = map_df['user'].apply(lambda x: '#FFFF00' if x == "OFFICIAL CENTER" else ('#00FF00' if x == "You" else '#0000FF'))
-        st.map(map_df, latitude='lat', longitude='lon', color='color', zoom=13)
+        map_df['color'] = map_df['user'].apply(lambda x: '#FFFF00' if x == "OFFICIAL" else ('#00FF00' if x == "You" else '#0000FF'))
+        # Zoom 10 covers the main populated areas of Kuwait
+        st.map(map_df, latitude='lat', longitude='lon', color='color', zoom=9)
+        st.caption("🟡 Recycling Centers | 🔵 Neighbors | 🟢 Your Posts")
     else:
-        st.warning("No matches found on the map.")
+        st.warning("No items found in this area.")
 
 with t3:
-    st.subheader("Neighborhood Feed")
-    display_feed = [d for d in filtered_data if d['user'] != "OFFICIAL CENTER"]
-    if not display_feed:
-        st.info("No items match your search.")
-    for item in reversed(display_feed):
+    st.subheader("National Feed")
+    for item in reversed([d for d in filtered_data if d['user'] != "OFFICIAL"]):
         with st.container(border=True):
-            st.write
+            st.write(f"**{item['name']}** - {item.get('area', 'Kuwait')}")
+            st.caption(f"👤 {item['user']} | 🌱 {item.get('cat', 'Item')}")
+
+with t4:
+    st.subheader("🏆 Kuwait's Top Eco-Warriors")
+    if user_items:
+        rank_df = pd.DataFrame(user_items)
+        rank_df['eco_num'] = 10 # Defaulting each post to 10kg
+        ranking = rank_df.groupby('user')['eco_num'].sum().sort_values(ascending=False).reset_index()
+        st.table(ranking.head(10))
