@@ -6,7 +6,12 @@ import random
 import io
 
 # --- Page Config ---
-st.set_page_config(page_title="EcoScan Leader", page_icon="🌱", layout="wide")
+st.set_page_config(
+    page_title="EcoScan Pro: Salmiya",
+    page_icon="🌱",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- Memory & State ---
 if "messages" not in st.session_state: st.session_state.messages = []
@@ -88,4 +93,5 @@ if st.session_state.show_chat:
             st.balloons()
             st.success("Swap Confirmed! You've officially saved more carbon today than 90% of people.")
             cert = create_certificate("Salmiya Hero", random.randint(5, 25))
+
             st.download_button(label="📥 Download My Impact Certificate", data=cert, file_name="eco_certificate.png", mime="image/png")
