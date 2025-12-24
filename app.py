@@ -1,8 +1,7 @@
 import streamlit as st
 
-# --- STEP 1: THE SECRET GOOGLE TAG ---
-# This MUST be the very first line of code.
-# This places the code in the hidden 'Header' where Google looks.
+# --- STEP 1: HIDDEN GOOGLE VERIFICATION ---
+# This must be at the very top. It places the tag in the 'Head' for Google.
 st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼")
 
 st.markdown(
@@ -29,7 +28,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- STEP 3: YOUR FOUNDER CONTENT ---
+# --- STEP 3: YOUR FOUNDER CONTENT (Always Public) ---
 st.markdown('<div class="main-banner"><h1>KW EcoScan Kuwait</h1><p>Community Sustainability Portal</p></div>', unsafe_allow_html=True)
 
 st.markdown("""
@@ -44,7 +43,5 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.divider()
-
-# --- STEP 4: STATUS ---
-st.success("✅ Ownership Verification Code is Active.")
-st.info("Please go to Google Search Console and click 'Verify' now.")
+st.success("✅ Ownership Verification Tag is Live.")
+st.info("Wait 60 seconds after saving, then click 'Verify' in Google Search Console.")
