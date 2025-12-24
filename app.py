@@ -19,7 +19,6 @@ def load_data():
     user_data = []
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f: user_data = json.load(f)
-    # Default seed data for the leaderboard
     if not user_data:
         user_data = [
             {"name": "Bicycle", "user": "Fatima", "lat": 29.3375, "lon": 48.0750, "eco": "50kg", "cat": "Sports"},
@@ -34,25 +33,28 @@ def save_item(name, user, lat, lon, eco, cat):
     current_data.append({"name": name, "user": user, "lat": lat, "lon": lon, "eco": eco, "cat": cat})
     with open(DB_FILE, "w") as f: json.dump(current_data, f)
 
-# --- Logic: Calculate Leaderboard ---
+# --- Logic: Search & Filter ---
 full_data = load_data()
 user_items = [d for d in full_data if d['user'] != "OFFICIAL CENTER"]
 
-# Group by user and sum their CO2 impact
+# Sidebar Search & Filter
+st.sidebar.title("🌍 Salmiya Impact")
+search_query = st.sidebar.text_input("🔍 Search items (e.g. 'bike')", "").lower()
+selected_cat = st.sidebar.selectbox("Category:", ["All", "Furniture", "Electronics", "Clothes", "Sports", "Recycling"])
+
+# Apply Search and Category Filters
+filtered_data = [
+    d for d in full_data 
+    if (search_query in d['name'].lower()) and 
+    (selected_cat == "All" or d['cat'] == selected_cat)
+]
+
+# --- Sidebar Metrics ---
 leaderboard_df = pd.DataFrame(user_items)
 leaderboard_df['eco_num'] = leaderboard_df['eco'].apply(lambda x: int(str(x).replace('kg','')))
 ranking = leaderboard_df.groupby('user')['eco_num'].sum().sort_values(ascending=False).reset_index()
-ranking.columns = ['Neighbor', 'Total CO2 Saved (kg)']
-
-total_saved = 5120 + ranking['Total CO2 Saved (kg)'].sum()
-
-# --- Sidebar ---
-st.sidebar.title("🌍 Salmiya Impact")
+total_saved = 5120 + ranking['eco_num'].sum()
 st.sidebar.metric(label="Neighborhood Total", value=f"{total_saved} kg")
-
-# WhatsApp Share
-share_text = f"Salmiya has saved {total_saved}kg of CO2! Check out the Leaderboard on EcoScan. 🌱"
-st.sidebar.markdown(f"[![Share on WhatsApp](https://img.shields.io/badge/Share-WhatsApp-25D366?style=for-the-badge&logo=whatsapp)](https://api.whatsapp.com/send?text={share_text})")
 
 # --- Main App ---
 st.title("🌱 EcoScan & Swap")
@@ -65,11 +67,23 @@ with t1:
     if up:
         if st.button("Confirm & Post"):
             save_item(up.name.split('.')[0], "You", 29.33 + (len(user_items)*0.005), 48.07 + (len(user_items)*0.005), "10kg", item_cat)
-            st.success("Impact updated on Leaderboard!")
+            st.success("Item posted!")
             st.balloons()
 
 with t2:
-    st.subheader("Salmiya Map")
-    map_df = pd.DataFrame(full_data)
-    map_df['color'] = map_df['user'].apply(lambda x: '#FFFF00' if x == "OFFICIAL CENTER" else ('#00FF00' if x == "You" else '#0000FF'))
-    st.map(map_df, latitude='lat', longitude='lon', color='color
+    st.subheader(f"Map Results: '{search_query}'")
+    if filtered_data:
+        map_df = pd.DataFrame(filtered_data)
+        map_df['color'] = map_df['user'].apply(lambda x: '#FFFF00' if x == "OFFICIAL CENTER" else ('#00FF00' if x == "You" else '#0000FF'))
+        st.map(map_df, latitude='lat', longitude='lon', color='color', zoom=13)
+    else:
+        st.warning("No matches found on the map.")
+
+with t3:
+    st.subheader("Neighborhood Feed")
+    display_feed = [d for d in filtered_data if d['user'] != "OFFICIAL CENTER"]
+    if not display_feed:
+        st.info("No items match your search.")
+    for item in reversed(display_feed):
+        with st.container(border=True):
+            st.write
