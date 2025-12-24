@@ -3,127 +3,165 @@ import pandas as pd
 import json
 import os
 import random
+import base64
 from datetime import datetime
+from PIL import Image
+import io
 
-# 1. PAGE CONFIG
-st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼", layout="wide")
+# --- 1. BRANDED PAGE SETUP ---
+st.set_page_config(
+    page_title="EcoScan Kuwait | Professional Portal",
+    page_icon="🇰🇼",
+    layout="wide"
+)
 
-# --- Database Setup ---
+# --- 2. DATA MANAGEMENT ---
 USER_DB = "users_db.json"
 ITEM_DB = "items_db.json"
-FEEDBACK_DB = "feedback_db.json" # New database for your suggestions
-FOUNDER_IMAGE = "founder.jpeg" 
-KUWAIT_AREAS = ["Asimah", "Hawalli", "Farwaniya", "Mubarak Al-Kabeer", "Ahmadi", "Jahra"]
-CATEGORIES = ["Furniture", "Electronics", "Books", "Clothes", "Appliances", "Other"]
+FEEDBACK_DB = "feedback_db.json"
+FOUNDER_IMAGE = "founder.jpeg"
 
-# --- Sustainability Tips List ---
-TIPS = [
-    "💧 **Tip:** Fix leaking taps! A single drip can waste over 50 liters of water a day in Kuwait.",
-    "🛍️ **Tip:** Bring your own reusable bags when shopping at Co-ops to reduce plastic waste.",
-    "💡 **Tip:** Switch to LED bulbs. They last 25 times longer and use 75% less energy.",
-    "♻️ **Tip:** Before throwing something away, ask: 'Can I swap this on EcoScan first?'",
-    "☀️ **Tip:** Close your curtains during peak sunlight hours to keep your home cool and save AC energy."
-]
-
-def load_json(file):
+def load_data(file):
     if os.path.exists(file):
-        with open(file, "r") as f: 
+        with open(file, "r") as f:
             try: return json.load(f)
             except: return []
     return []
 
-def save_json(file, data):
-    with open(file, "w") as f: json.dump(data, f)
+def save_data(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f, indent=4)
 
-# Initialize Session States
+# Helper function to convert images to strings for JSON storage
+def image_to_base64(uploaded_file):
+    if uploaded_file is not None:
+        return base64.b64encode(uploaded_file.getvalue()).decode()
+    return None
+
+# --- 3. SESSION LOGIC ---
 if "user" not in st.session_state: st.session_state.user = None
 if "view" not in st.session_state: st.session_state.view = "login"
 
-# --- SIDEBAR: Founder & Account ---
+# --- 4. PROFESSIONAL SIDEBAR ---
 with st.sidebar:
-    st.header("🇰🇼 EcoScan Kuwait")
+    st.title("🇰🇼 EcoScan")
+    st.caption("Kuwait's National Swap Network")
     
-    # Founder's Corner
-    st.subheader("👤 Founder's Corner")
-    if os.path.exists(FOUNDER_IMAGE):
-        st.image(FOUNDER_IMAGE, use_container_width=True)
-        st.info("**Abilash's Message:** Thank you for joining! Your feedback helps me improve this app for all of Kuwait.")
-        st.link_button("💬 WhatsApp Me", "https://wa.me/96512345678", use_container_width=True)
-    
+    # Founder Section
+    with st.expander("👤 Founder's Message", expanded=False):
+        if os.path.exists(FOUNDER_IMAGE):
+            st.image(FOUNDER_IMAGE, use_container_width=True)
+        st.info("**Abilash Vani**\nHelping Kuwait reach zero-waste goals through community action.")
+        st.link_button("💬 Support WhatsApp", "https://wa.me/96512345678")
+
     st.divider()
 
-    # Account Management
-    if st.session_state.user is None:
+    if st.session_state.user:
+        # Display User Metrics
+        users = load_data(USER_DB)
+        db_user = next((u for u in users if u['phone'] == st.session_state.user['phone']), st.session_state.user)
+        st.metric("🌱 Eco-Points", f"{db_user.get('points', 0)} PTS")
+        st.write(f"Verified: **{db_user['name']}**")
+        st.caption(f"📍 {db_user['area']}")
+        
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.user = None
+            st.rerun()
+    else:
+        # Professional Login/Signup Forms
         if st.session_state.view == "login":
-            st.markdown("### 🔑 Login")
-            l_phone = st.text_input("Phone Number")
-            l_pass = st.text_input("Password", type="password")
-            if st.button("Log In", type="primary", use_container_width=True):
-                users = load_json(USER_DB)
-                u = next((u for u in users if u['phone'] == l_phone and u['password'] == l_pass), None)
-                if u:
+            st.subheader("Login")
+            phone = st.text_input("Mobile")
+            pw = st.text_input("Password", type="password")
+            if st.button("Access Portal", type="primary", use_container_width=True):
+                users = load_data(USER_DB)
+                u = next((u for u in users if u['phone'] == phone and u['password'] == pw), None)
+                if u: 
                     st.session_state.user = u
                     st.rerun()
-                else: st.error("Invalid credentials")
-            if st.button("New User? Sign Up"): st.session_state.view = "signup"; st.rerun()
-
-        elif st.session_state.view == "signup":
-            st.markdown("### 📝 Register")
+                else: st.error("Access Denied")
+            if st.button("Create Account"): st.session_state.view = "signup"; st.rerun()
+        else:
+            st.subheader("Register")
             s_name = st.text_input("Full Name")
             s_phone = st.text_input("Mobile Number")
-            s_area = st.selectbox("Governorate", KUWAIT_AREAS)
-            s_pass = st.text_input("Password", type="password")
-            if st.button("Join & Get 10 Points!", type="primary", use_container_width=True):
-                users = load_json(USER_DB)
-                users.append({"name": s_name, "phone": s_phone, "area": s_area, "password": s_pass, "points": 10})
-                save_json(USER_DB, users)
-                st.success("Account Created! Please Login.")
-                st.session_state.view = "login"; st.rerun()
-            if st.button("Back"): st.session_state.view = "login"; st.rerun()
-    else:
-        st.success(f"Verified: {st.session_state.user['name']}")
-        users = load_json(USER_DB)
-        db_user = next((u for u in users if u['phone'] == st.session_state.user['phone']), st.session_state.user)
-        st.metric(label="🌱 My Eco-Points", value=f"{db_user.get('points', 0)} PTS")
-        if st.button("Logout", use_container_width=True):
-            st.session_state.user = None; st.rerun()
+            s_area = st.selectbox("Area", ["Asimah", "Hawalli", "Farwaniya", "Ahmadi", "Jahra", "Mubarak"])
+            s_pw = st.text_input("Password", type="password")
+            if st.button("Join Movement", type="primary"):
+                users = load_data(USER_DB)
+                users.append({"name": s_name, "phone": s_phone, "area": s_area, "password": s_pw, "points": 10})
+                save_data(USER_DB, users)
+                st.session_state.view = "login"
+                st.rerun()
 
-# --- MAIN PAGE CONTENT ---
-st.title("🌱 EcoScan Kuwait")
-
+# --- 5. MAIN INTERFACE ---
 if st.session_state.user:
-    # Tip of the Day
-    st.chat_message("assistant").write(random.choice(TIPS))
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["📤 Post & Earn", "📱 Search Feed", "🏆 Leaderboard", "📩 Contact Founder"])
+    # Header Banner
+    st.markdown("""
+        <div style="background-color:#2E7D32;padding:25px;border-radius:15px;color:white;text-align:center">
+            <h1 style="color:white;margin:0">Sustainable Kuwait Portal</h1>
+            <p style="margin:0">Every swap reduces Kuwait's landfill waste.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.write("")
 
-    # TAB 1: POSTING
+    tab1, tab2, tab3, tab4 = st.tabs(["📤 Post Item", "📱 Search Feed", "🏆 Leaderboard", "📩 Suggestions"])
+
     with tab1:
-        st.subheader("Add an Item")
-        c1, c2 = st.columns(2)
-        with c1:
-            item_name = st.text_input("Item Name")
-            item_desc = st.text_area("Description")
-        with c2:
-            item_cat = st.selectbox("Category", CATEGORIES)
-            item_cond = st.select_slider("Condition", options=["Fair", "Good", "Excellent", "New"])
+        st.subheader("List a New Swap")
+        with st.form("professional_post", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            item_name = col1.text_input("Item Name")
+            item_cat = col2.selectbox("Category", ["Electronics", "Furniture", "Books", "Clothing", "Other"])
+            item_desc = st.text_area("Describe the condition and pickup details")
+            item_img = st.file_uploader("Upload Item Photo (Optional)", type=['jpg', 'png', 'jpeg'])
+            
+            if st.form_submit_button("Publish to Marketplace (+10 Points)"):
+                if item_name:
+                    items = load_data(ITEM_DB)
+                    img_data = image_to_base64(item_img)
+                    items.append({
+                        "id": str(datetime.now().timestamp()),
+                        "name": item_name, "desc": item_desc, "cat": item_cat,
+                        "user": st.session_state.user['name'], "area": st.session_state.user['area'],
+                        "image": img_data, "date": datetime.now().strftime("%Y-%m-%d")
+                    })
+                    save_data(ITEM_DB, items)
+                    # Reward Points
+                    users = load_data(USER_DB)
+                    for u in users:
+                        if u['phone'] == st.session_state.user['phone']: u['points'] = u.get('points', 0) + 10
+                    save_data(USER_DB, users)
+                    st.success("Your item is now live!")
+                    st.balloons()
+                    st.rerun()
 
-        if st.button("🚀 Publish Item", type="primary"):
-            if item_name:
-                items = load_json(ITEM_DB)
-                items.append({
-                    "id": str(datetime.now().timestamp()),
-                    "name": item_name, "desc": item_desc, "cat": item_cat, "cond": item_cond,
-                    "user": st.session_state.user['name'], "area": st.session_state.user['area'],
-                    "date": datetime.now().strftime("%d %b %Y")
-                })
-                save_json(ITEM_DB, items)
-                
-                # Update Points
-                users = load_json(USER_DB)
-                for u in users:
-                    if u['phone'] == st.session_state.user['phone']:
-                        u['points'] = u.get('points', 0) + 10
-                        break
-                save_json(USER_DB, users)
-                st.success("
+    with tab2:
+        st.subheader("Available Community Swaps")
+        search = st.text_input("🔍 Search by name, category, or area...")
+        all_items = load_data(ITEM_DB)
+        filtered = [i for i in all_items if search.lower() in i['name'].lower() or search.lower() in i['cat'].lower() or search.lower() in i['area'].lower()]
+        
+        if not filtered:
+            st.info("No items found matching your search.")
+        else:
+            for i in reversed(filtered):
+                with st.container(border=True):
+                    col_img, col_info = st.columns([1, 2])
+                    with col_img:
+                        if i.get("image"):
+                            st.image(base64.b64decode(i["image"]), use_container_width=True)
+                        else:
+                            st.image("https://via.placeholder.com/300?text=No+Image", use_container_width=True)
+                    with col_info:
+                        st.markdown(f"### {i['name']}")
+                        st.markdown(f"**Category:** {i['cat']} | **Location:** {i['area']}")
+                        st.write(i['desc'])
+                        st.caption(f"Posted by {i['user']} on {i.get('date', 'Unknown')}")
+                        st.button("Request Item", key=i['id'])
+
+    with tab3:
+        st.subheader("🏆 National Eco-Warriors")
+        all_users = load_data(USER_DB)
+        if all_users:
+            df = pd.DataFrame(all_users)[['name', 'area', 'points']].sort_values('points', ascending=
