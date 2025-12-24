@@ -2,14 +2,13 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-from fpdf import FPDF
 
 # 1. PAGE CONFIG
-st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼", layout="wide")
+st.set_page_config(page_title="EcoScan Kuwait Pro", page_icon="🇰🇼", layout="wide")
 
-# --- Database Setup ---
 USER_DB = "users_db.json"
 ITEM_DB = "items_db.json"
+KUWAIT_AREAS = ["Asimah", "Hawalli", "Farwaniya", "Mubarak Al-Kabeer", "Ahmadi", "Jahra"]
 
 def load_json(file):
     if os.path.exists(file):
@@ -19,92 +18,88 @@ def load_json(file):
 def save_json(file, data):
     with open(file, "w") as f: json.dump(data, f)
 
-# --- Authentication Logic ---
+# --- Session State Management ---
 if "user" not in st.session_state:
     st.session_state.user = None
+if "view" not in st.session_state:
+    st.session_state.view = "login"
 
-def sign_up(name, phone, area, password):
-    users = load_json(USER_DB)
-    if any(u['phone'] == phone for u in users):
-        return False
-    users.append({"name": name, "phone": phone, "area": area, "password": password, "points": 0})
-    save_json(USER_DB, users)
-    return True
+# --- Sidebar: Account Center ---
+st.sidebar.title("👤 Account Center")
 
-def login(phone, password):
-    users = load_json(USER_DB)
-    for u in users:
-        if u['phone'] == phone and u['password'] == password:
-            return u
-    return None
-
-# --- UI: Login / Profile Sidebar ---
-st.sidebar.title("👤 My Profile")
 if st.session_state.user is None:
-    tab_auth = st.sidebar.tabs(["Login", "Sign Up"])
-    with tab_auth[0]:
-        l_phone = st.text_input("Phone Number")
-        l_pass = st.text_input("Password", type="password")
-        if st.button("Login"):
-            u = login(l_phone, l_pass)
-            if u: 
+    # 1. Social Login Interface (Visual Only)
+    st.sidebar.markdown("### Quick Login")
+    st.sidebar.button("Continue with Google 🌐", use_container_width=True)
+    st.sidebar.button("Continue with Facebook 🔵", use_container_width=True)
+    st.sidebar.divider()
+
+    # 2. Login View
+    if st.session_state.view == "login":
+        st.sidebar.subheader("Login")
+        l_phone = st.sidebar.text_input("Phone Number")
+        l_pass = st.sidebar.text_input("Password", type="password")
+        if st.sidebar.button("Log In", type="primary", use_container_width=True):
+            users = load_json(USER_DB)
+            u = next((u for u in users if u['phone'] == l_phone and u['password'] == l_pass), None)
+            if u:
                 st.session_state.user = u
                 st.rerun()
-            else: st.error("Wrong credentials")
-    with tab_auth[1]:
-        s_name = st.text_input("Full Name")
-        s_phone = st.text_input("Mobile No.")
-        s_area = st.selectbox("Area", ["Asimah", "Hawalli", "Farwaniya", "Ahmadi", "Jahra"])
-        s_pass = st.text_input("New Password", type="password")
-        if st.button("Register"):
-            if sign_up(s_name, s_phone, s_area, s_pass):
-                st.success("Account created! Please login.")
-            else: st.error("Number already registered")
+            else: st.sidebar.error("Invalid credentials")
+        
+        col1, col2 = st.sidebar.columns(2)
+        if col1.button("Sign Up"): st.session_state.view = "signup"; st.rerun()
+        if col2.button("Forgot?"): st.session_state.view = "forgot"; st.rerun()
+
+    # 3. Forgot Password View
+    elif st.session_state.view == "forgot":
+        st.sidebar.subheader("Reset Password")
+        f_phone = st.sidebar.text_input("Enter Registered Mobile")
+        f_new = st.sidebar.text_input("New Password", type="password")
+        if st.sidebar.button("Update Password"):
+            users = load_json(USER_DB)
+            found = False
+            for u in users:
+                if u['phone'] == f_phone:
+                    u['password'] = f_new
+                    found = True; break
+            if found:
+                save_json(USER_DB, users)
+                st.sidebar.success("Password Updated!")
+                st.session_state.view = "login"; st.rerun()
+            else: st.sidebar.error("Number not found")
+        if st.sidebar.button("Back"): st.session_state.view = "login"; st.rerun()
+
 else:
-    st.sidebar.write(f"Welcome, **{st.session_state.user['name']}**!")
-    st.sidebar.write(f"📍 Location: {st.session_state.user['area']}")
-    st.sidebar.write(f"📞 Contact: {st.session_state.user['phone']}")
-    if st.sidebar.button("Logout"):
+    # --- LOGGED IN: Edit Profile Section ---
+    st.sidebar.success(f"Hello, {st.session_state.user['name']}!")
+    
+    with st.sidebar.expander("⚙️ Edit My Profile"):
+        edit_name = st.text_input("Full Name", value=st.session_state.user['name'])
+        edit_area = st.selectbox("My Area", KUWAIT_AREAS, index=KUWAIT_AREAS.index(st.session_state.user.get('area', 'Asimah')))
+        edit_phone = st.text_input("Contact Number", value=st.session_state.user['phone'])
+        
+        if st.button("Save Profile Changes"):
+            users = load_json(USER_DB)
+            for u in users:
+                if u['phone'] == st.session_state.user['phone']:
+                    u['name'] = edit_name
+                    u['area'] = edit_area
+                    u['phone'] = edit_phone
+                    st.session_state.user = u # Update current session
+                    break
+            save_json(USER_DB, users)
+            st.toast("Profile updated successfully!")
+            st.rerun()
+
+    if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.user = None
         st.rerun()
 
-# --- Main App Logic ---
-st.title("🇰🇼 EcoScan: Kuwait Member Portal")
-
-if st.session_state.user is None:
-    st.info("Please Login or Sign Up from the sidebar to start swapping items!")
+# --- Main App Content ---
+st.title("🌱 EcoScan Kuwait")
+if st.session_state.user:
+    st.write(f"Showing items for your area: **{st.session_state.user['area']}**")
+    # (Rest of your tab logic for Map, Feed, etc. goes here)
 else:
-    t1, t2, t3 = st.tabs(["📤 Post Item", "📍 Map", "🏆 Leaderboard"])
-
-    with t1:
-        st.subheader("Post a New Item")
-        i_name = st.text_input("Item Name")
-        i_cat = st.selectbox("Category", ["Furniture", "Electronics", "Clothes"])
-        if st.button("Post Item"):
-            items = load_json(ITEM_DB)
-            # Link item to the logged-in user
-            new_item = {
-                "name": i_name,
-                "user": st.session_state.user['name'],
-                "phone": st.session_state.user['phone'],
-                "area": st.session_state.user['area'],
-                "cat": i_cat,
-                "lat": 29.37, "lon": 47.97 # Simplified location
-            }
-            items.append(new_item)
-            save_json(ITEM_DB, items)
-            st.success("Item posted! Neighbors can now see your contact info.")
-            st.balloons()
-
-    with t2:
-        st.subheader("Kuwait Eco-Map")
-        items = load_json(ITEM_DB)
-        if items:
-            df = pd.DataFrame(items)
-            st.map(df)
-        
-    with t3:
-        st.subheader("Community Rankings")
-        users = load_json(USER_DB)
-        if users:
-            st.table(pd.DataFrame(users)[['name', 'area', 'phone']])
+    st.warning("Please Login or Sign Up to view the community feed.")
