@@ -9,7 +9,8 @@ st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼", layout="wi
 
 USER_DB = "users_db.json"
 ITEM_DB = "items_db.json"
-FOUNDER_IMAGE = "founder.jpeg"
+# CHANGED TO MATCH YOUR GITHUB FILENAME
+FOUNDER_IMAGE = "founder.jpeg" 
 KUWAIT_AREAS = ["Asimah", "Hawalli", "Farwaniya", "Mubarak Al-Kabeer", "Ahmadi", "Jahra"]
 
 def load_json(file):
@@ -26,28 +27,26 @@ def save_json(file, data):
 if "user" not in st.session_state: st.session_state.user = None
 if "view" not in st.session_state: st.session_state.view = "login"
 
-# --- SIDEBAR: Founder & Account ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.title("🇰🇼 EcoScan Kuwait")
+    st.header("🇰🇼 EcoScan Kuwait")
     
-    # --- FOUNDER SECTION ---
-    st.markdown("### 👤 Founder's Corner")
+    # --- FOUNDER'S CORNER ---
+    st.subheader("👤 Founder's Corner")
     if os.path.exists(FOUNDER_IMAGE):
         st.image(FOUNDER_IMAGE, use_container_width=True)
+        st.info("**Abilash's Message:** Welcome to our national swap community! Let's build a greener Kuwait together.")
     else:
-        st.warning("Photo not found. Please upload 'founder.jpg' to GitHub.")
+        st.warning(f"Searching for '{FOUNDER_IMAGE}'... Please ensure the filename on GitHub matches line 12 of your code exactly.")
     
-    st.info("**Abilash's Vision:**\nWelcome! This platform is built to unite Kuwait in reducing waste. Join us today!")
     st.divider()
 
     # --- ACCOUNT SYSTEM ---
     if st.session_state.user is None:
-        # LOGIN VIEW
         if st.session_state.view == "login":
-            st.subheader("Login to Swap")
-            l_phone = st.text_input("Phone Number", placeholder="e.g. 99887766")
+            st.markdown("### Login")
+            l_phone = st.text_input("Phone Number")
             l_pass = st.text_input("Password", type="password")
-            
             if st.button("Log In", type="primary", use_container_width=True):
                 users = load_json(USER_DB)
                 u = next((u for u in users if u['phone'] == l_phone and u['password'] == l_pass), None)
@@ -56,20 +55,18 @@ with st.sidebar:
                     st.rerun()
                 else: st.error("Invalid Login")
             
-            st.write("---")
-            if st.button("Don't have an account? Sign Up Here", use_container_width=True):
+            if st.button("No account? Click to Sign Up", use_container_width=True):
                 st.session_state.view = "signup"
                 st.rerun()
 
-        # SIGN UP VIEW (The place to register)
         elif st.session_state.view == "signup":
-            st.subheader("📝 New Member Registration")
+            st.markdown("### 📝 Create New Account")
             s_name = st.text_input("Full Name")
             s_phone = st.text_input("Mobile Number")
-            s_area = st.selectbox("Your Governorate", KUWAIT_AREAS)
+            s_area = st.selectbox("Select Governorate", KUWAIT_AREAS)
             s_pass = st.text_input("Create Password", type="password")
             
-            if st.button("Register & Join", type="primary", use_container_width=True):
+            if st.button("Register Now", type="primary", use_container_width=True):
                 if s_name and s_phone and s_pass:
                     users = load_json(USER_DB)
                     users.append({"name": s_name, "phone": s_phone, "area": s_area, "password": s_pass})
@@ -84,17 +81,15 @@ with st.sidebar:
                 st.session_state.view = "login"
                 st.rerun()
     else:
-        st.success(f"Logged in as: {st.session_state.user['name']}")
+        st.success(f"Hello, {st.session_state.user['name']}!")
         if st.button("Logout", use_container_width=True):
             st.session_state.user = None
             st.rerun()
 
-# --- MAIN PAGE CONTENT ---
+# --- MAIN PAGE ---
 st.title("🌱 EcoScan Kuwait")
 if st.session_state.user:
-    st.success(f"Welcome back to the portal, {st.session_state.user['name']}!")
-    # Tabs for Map/Feed would go here
+    st.write(f"Welcome to the portal, **{st.session_state.user['name']}**. You are registered in **{st.session_state.user['area']}**.")
 else:
-    st.info("### Start Your Sustainability Journey")
-    st.write("Please use the sidebar to **Sign Up** and join the community.")
-
+    st.info("### Please use the sidebar to Login or Sign Up.")
+    st.image("https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&q=80&w=1000", caption="Join the movement.")
