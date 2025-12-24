@@ -1,17 +1,13 @@
 import streamlit as st
-import pandas as pd
-import json
-import os
-from datetime import datetime
 
-# --- 1. GOOGLE SEARCH CONSOLE TAG ---
-# Keep this at the very top for Google's bots
-st.markdown('<head><meta name="google-site-verification" content="UbGI9p25Kivjr9u465NRYSpRTy4euChN-XFrwiy3r40" /></head>', unsafe_allow_html=True)
+# --- STEP 1: PUBLIC GOOGLE VERIFICATION (Must be FIRST) ---
+# This remains visible even if the user isn't logged in.
+GOOGLE_TAG = "UbGI9p25Kivjr9u465NRYSpRTy4euChN-XFrwiy3r40"
+st.markdown(f'<head><meta name="google-site-verification" content="{GOOGLE_TAG}" /></head>', unsafe_allow_html=True)
 
-# --- 2. MOBILE APP CONFIG ---
+# --- STEP 2: APP CONFIG & STYLE ---
 st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼", layout="centered")
 
-# --- 3. CUSTOM KUWAITI STYLE ---
 st.markdown("""
     <style>
     .stApp { background-color: #F1F8E9; }
@@ -23,40 +19,30 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. SECRETS CHECK (Prevents the Redacted Error) ---
+# --- STEP 3: LOGIN LOGIC ---
+# Check if secrets are configured
 if "auth" not in st.secrets:
-    st.error("⚠️ Setup Required: Please go to Streamlit Cloud Settings and add your [auth] secrets.")
-    st.info("I need your Client ID and Client Secret from Google Cloud to function.")
+    st.error("⚠️ Configuration missing in Streamlit Cloud Secrets dashboard.")
     st.stop()
 
-# --- 5. SOCIAL LOGIN LOGIC ---
 if not st.user.is_logged_in:
-    st.markdown('<div class="main-banner"><h1>🇰🇼 EcoScan Kuwait</h1><p>The Circular Economy for Kuwait</p></div>', unsafe_allow_html=True)
-    st.subheader("Join the community")
+    st.markdown('<div class="main-banner"><h1>🇰🇼 EcoScan Kuwait</h1><p>Join the Sustainability Community</p></div>', unsafe_allow_html=True)
+    st.subheader("Sign in to start swapping")
     
     if st.button("Continue with Google", type="primary"):
-        st.login() # This triggers the Google handshake
-    st.stop() 
+        st.login() # Triggers Google OAuth using st.secrets
+    st.stop()
 
-# --- 6. MAIN APP INTERFACE (Only shown after login) ---
-st.markdown(f'<div class="main-banner"><h1>EcoScan Kuwait</h1><p>Hello, {st.user.name}!</p></div>', unsafe_allow_html=True)
+# --- STEP 4: PROTECTED CONTENT (Only for logged-in users) ---
+st.markdown(f'<div class="main-banner"><h1>EcoScan Kuwait</h1><p>Welcome, {st.user.name}!</p></div>', unsafe_allow_html=True)
 
-menu = ["Marketplace Feed", "Post an Item", "My Account"]
-choice = st.sidebar.selectbox("Menu", menu)
+tab1, tab2 = st.tabs(["📱 Marketplace Feed", "⚙️ Account"])
 
-if choice == "Post an Item":
-    st.subheader("What are you sharing today?")
-    with st.form("post_form"):
-        item = st.text_input("Item Name")
-        area = st.selectbox("Area", ["Hawalli", "Salmiya", "Kuwait City", "Jahra"])
-        if st.form_submit_button("Post to Marketplace"):
-            st.success(f"Listing created for {item}!")
+with tab1:
+    st.subheader("Community Listings")
+    st.info("No items posted in Kuwait yet. Be the first!")
 
-elif choice == "Marketplace Feed":
-    st.subheader("Live Listings in Kuwait")
-    st.info("Searching for items near you...")
-
-elif choice == "My Account":
-    st.write(f"**Verified Email:** {st.user.email}")
+with tab2:
+    st.write(f"Logged in as: **{st.user.email}**")
     if st.button("Log Out"):
         st.logout()
