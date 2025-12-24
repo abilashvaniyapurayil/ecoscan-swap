@@ -1,18 +1,20 @@
 import streamlit as st
 
-# --- STEP 1: HIDDEN GOOGLE VERIFICATION ---
-# st.set_page_config MUST be the very first Streamlit command.
+# --- STEP 1: GOOGLE ANALYTICS & VERIFICATION (MUST BE FIRST) ---
+# This script injects your Analytics ID into the app's head.
 st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼")
 
-# This places the verification tag in the hidden 'Header' where Google looks.
-st.markdown(
-    """
-    <head>
-        <meta name="google-site-verification" content="UbGI9p25Kivjr9u465NRYSpRTy4euChN-XFrwiy3r40" />
-    </head>
-    """, 
-    unsafe_allow_html=True
-)
+ga_code = f"""
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XYKY07PYHX"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){{dataLayer.push(arguments);}}
+        gtag('js', new Date());
+        gtag('config', 'G-XYKY07PYHX');
+    </script>
+    <meta name="google-site-verification" content="UbGI9p25Kivjr9u465NRYSpRTy4euChN-XFrwiy3r40" />
+"""
+st.markdown(ga_code, unsafe_allow_html=True)
 
 # --- STEP 2: PROFESSIONAL STYLE ---
 st.markdown("""
@@ -44,7 +46,5 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.divider()
-
-# --- STEP 4: STATUS ---
-st.success("✅ Ownership Verification Tag is Active in the Header.")
-st.info("Wait 60 seconds after saving, then click 'Verify' in Google Search Console.")
+st.success("✅ Google Analytics & Verification Tag are Active.")
+st.info("Wait 60 seconds for the cloud to update, then click 'Verify' in Google Search Console.")
