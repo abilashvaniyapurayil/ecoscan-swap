@@ -10,7 +10,7 @@ st.set_page_config(page_title="EcoScan Kuwait", page_icon="🇰🇼", layout="wi
 # --- Database Setup ---
 USER_DB = "users_db.json"
 ITEM_DB = "items_db.json"
-FOUNDER_IMAGE = "founder.jpeg" # Matches your GitHub file exactly
+FOUNDER_IMAGE = "founder.jpeg" 
 KUWAIT_AREAS = ["Asimah", "Hawalli", "Farwaniya", "Mubarak Al-Kabeer", "Ahmadi", "Jahra"]
 CATEGORIES = ["Furniture", "Electronics", "Books", "Clothes", "Appliances", "Other"]
 
@@ -36,7 +36,7 @@ with st.sidebar:
     st.subheader("👤 Founder's Corner")
     if os.path.exists(FOUNDER_IMAGE):
         st.image(FOUNDER_IMAGE, use_container_width=True)
-        st.info("**Abilash's Message:** Every swap counts! You now earn Eco-Points for every item you list.")
+        st.info("**Abilash's Message:** The Leaderboard is live! Check who is the top eco-warrior in Kuwait today.")
         st.link_button("💬 Chat with Founder", "https://wa.me/96512345678", use_container_width=True)
     
     st.divider()
@@ -64,15 +64,70 @@ with st.sidebar:
             s_pass = st.text_input("Password", type="password")
             if st.button("Join & Get 10 Points!", type="primary", use_container_width=True):
                 users = load_json(USER_DB)
-                # Initialize new user with 10 starter points
+                # Starter points for joining
                 users.append({"name": s_name, "phone": s_phone, "area": s_area, "password": s_pass, "points": 10})
                 save_json(USER_DB, users)
                 st.success("Account Created! Please Login.")
                 st.session_state.view = "login"; st.rerun()
             if st.button("Back"): st.session_state.view = "login"; st.rerun()
     else:
-        # User is logged in - Show their Stats
+        # User is logged in
         st.success(f"Verified: {st.session_state.user['name']}")
-        # Get points (default to 0 if missing)
-        current_points = st.session_state.user.get('points', 0)
-        st.
+        # Ensure we show the latest points from the database
+        users = load_json(USER_DB)
+        db_user = next((u for u in users if u['phone'] == st.session_state.user['phone']), st.session_state.user)
+        st.metric(label="🌱 My Eco-Points", value=f"{db_user.get('points', 0)} PTS")
+        st.caption(f"📍 Location: {st.session_state.user['area']}")
+        
+        if st.button("Logout", use_container_width=True):
+            st.session_state.user = None; st.rerun()
+
+# --- MAIN PAGE CONTENT ---
+st.title("🌱 EcoScan Kuwait: Green Community")
+
+if st.session_state.user:
+    tab1, tab2, tab3 = st.tabs(["📤 Post & Earn", "📱 Search Feed", "🏆 Leaderboard"])
+
+    # TAB 1: POSTING & EARNING
+    with tab1:
+        st.subheader("Earn 10 Points for every listing!")
+        c1, c2 = st.columns(2)
+        with c1:
+            item_name = st.text_input("Item Name")
+            item_desc = st.text_area("Item Details")
+        with c2:
+            item_cat = st.selectbox("Category", CATEGORIES)
+            item_cond = st.select_slider("Condition", options=["Fair", "Good", "Excellent", "New"])
+
+        if st.button("🚀 Publish Nationally", type="primary"):
+            if item_name:
+                # Save Item
+                items = load_json(ITEM_DB)
+                items.append({
+                    "id": str(datetime.now().timestamp()),
+                    "name": item_name, "desc": item_desc, "cat": item_cat, "cond": item_cond,
+                    "user": st.session_state.user['name'], "area": st.session_state.user['area'],
+                    "date": datetime.now().strftime("%d %b %Y")
+                })
+                save_json(ITEM_DB, items)
+                
+                # Update Points
+                users = load_json(USER_DB)
+                for u in users:
+                    if u['phone'] == st.session_state.user['phone']:
+                        u['points'] = u.get('points', 0) + 10
+                        break
+                save_json(USER_DB, users)
+                st.success("Item Published! +10 Eco-Points added.")
+                st.balloons()
+                st.rerun()
+            else: st.error("Please enter an item name.")
+
+    # TAB 2: SEARCH & FILTER FEED
+    with tab2:
+        st.subheader("Browse National Swaps")
+        f_col1, f_col2 = st.columns([2, 1])
+        with f_col1:
+            search = st.text_input("🔍 Search items...", placeholder="Try 'Electronics'")
+        with f_col2:
+            f_area = st.selectbox("Governorate Filter", ["All Kuwait"] +
