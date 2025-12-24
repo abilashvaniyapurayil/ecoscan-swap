@@ -52,11 +52,20 @@ with t1:
             st.balloons()
 
 with t2:
-    st.subheader("Neighborhood Swap Map") # Feature #1 & #2
+    st.subheader("Neighborhood Swap Map")
     map_df = pd.DataFrame(data)
-    # This creates the interactive map centered on Salmiya
-    st.map(map_df, latitude='lat', longitude='lon', zoom=13)
-    st.info("💡 The red dots show where neighbors are ready to swap items!")
+    
+    # This adds a color column: Blue for neighbors, Green for YOU
+    map_df['color'] = map_df['user'].apply(lambda x: '#0000FF' if x != 'You' else '#00FF00')
+    
+    # Advanced Map with colors
+    st.map(map_df, latitude='lat', longitude='lon', color='color', zoom=13)
+    
+    st.markdown("""
+    **Legend:**
+    * 🔵 **Blue Dot:** Neighbor's Item
+    * 🟢 **Green Dot:** Your Posted Item
+    """)
 
 with t3:
     st.subheader("Recent Swaps")
@@ -66,4 +75,5 @@ with t3:
             st.caption(f"👤 Offered by: {item['user']} | 🌱 Impact: {item['eco']}")
             if st.button(f"Message about {item['name']}", key=item['name']):
                 st.info("Chat feature connecting to neighbor...")
+
 
