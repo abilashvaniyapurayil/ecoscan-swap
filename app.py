@@ -53,7 +53,6 @@ def sanitize_phone(phone_number, country_code):
     clean_num = re.sub(r'\D', '', phone_number)
     
     # Remove the country code if the user typed it manually to avoid duplication
-    # (e.g., if user typed 96512345, we don't want to add 965 again to make 965965...)
     clean_code = re.sub(r'\D', '', country_code)
     
     if clean_num.startswith(clean_code):
@@ -93,9 +92,6 @@ def create_item(user, title, description, price, contact, image):
     c = conn.cursor()
     item_id = str(uuid.uuid4())
     
-    # In a real app, you would save the 'image' file to disk or cloud storage (S3).
-    # For this MVP, we will assume 'image' is just the filename or we skip saving binary data to DB for simplicity.
-    # We will just store the filename if provided.
     image_name = image.name if image else "placeholder.png"
     
     c.execute("INSERT INTO items (id, user, title, description, price, contact, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -142,6 +138,23 @@ def main():
     st.markdown(hide_st_style, unsafe_allow_html=True)
 
     init_db()
+
+    # --- SESSION TIMEOUT LOGIC (NEW FIX) ---
+    # Set timeout duration (e.g., 30 minutes = 1800 seconds)
+    TIMEOUT_SECONDS = 1800 
+    
+    if 'last_active' not in st.session_state:
+        st.session_state['last_active'] = time.time()
+
+    # If user has been inactive too long, reset the app
+    if time.time() - st.session_state['last_active'] > TIMEOUT_SECONDS:
+        st.session_state.clear()  # Wipes login status and all data
+        st.session_state['last_active'] = time.time()
+        st.rerun() # Forces a reload to the login screen
+    
+    # Update timer on every interaction
+    st.session_state['last_active'] = time.time()
+    # ---------------------------------------
 
     # Session State for Login
     if 'logged_in' not in st.session_state:
@@ -201,33 +214,25 @@ def main():
         # --- FOUNDER MESSAGE SECTION ---
         st.divider()
         st.subheader("👋 From the Founder")
-        
-        # Display image from root directory
         try:
             st.image("founder.jpeg", caption="Founder's Note", use_container_width=True)
         except:
             st.info("(founder.jpeg not found)")
-            
         st.info("Welcome to our community! We built this platform to make buying and selling simple, transparent, and direct. Thank you for being a part of our journey.")
         # -------------------------------
 
     # --- MAIN CONTENT AREA ---
     
-    # Define Tabs
     if st.session_state['logged_in']:
         tab1, tab2, tab3 = st.tabs(["🛍️ Buy Items", "➕ Sell Item", "👤 Profile"])
     else:
-        tab1 = st.container() # Only show Buy tab if not logged in (simulated via container)
+        tab1 = st.container() 
         st.subheader("🛍️ Buy Items")
-        # If not logged in, we only show items. Sell/Profile are hidden or prompting login.
 
     # -- TAB 1: BUY ITEMS (Feed) --
     with tab1:
         st.markdown("### Latest Listings")
-        
-        # Search Bar
         search_query = st.text_input("🔍 Search items...", "")
-        
         items = get_items()
         
         if search_query:
@@ -239,37 +244,26 @@ def main():
             for index, row in items.iterrows():
                 with st.container(border=True):
                     c1, c2 = st.columns([1, 3])
-                    
                     with c1:
-                        # Placeholder logic for images
                         st.image("https://via.placeholder.com/150?text=Item", use_container_width=True)
-                    
                     with c2:
                         st.subheader(row['title'])
                         st.write(f"**Price:** {row['price']} KD")
                         st.write(row['description'])
                         st.caption(f"Seller: {row['user']} | Posted: {row['timestamp']}")
                         
-                        # --- HYBRID CONTACT BUTTONS ---
                         col_wa, col_cmt = st.columns([1, 1])
-                        
                         with col_wa:
-                            # WhatsApp Direct Link
                             wa_message = f"Hi, I am interested in your item: {row['title']}"
-                            # row['contact'] is the phone number from DB
                             wa_link = f"https://wa.me/{row['contact']}?text={wa_message.replace(' ', '%20')}"
-                            
                             st.link_button("💬 Chat on WhatsApp", wa_link, type="primary")
 
-                        # --- INTERNAL COMMENTS SECTION ---
                         with st.expander(f"💬 Offers & Comments ({row['id'][:4]}...)"):
-                            # Show existing comments
                             existing_comments = get_comments(row['id'])
                             for c_user, c_text, c_time in existing_comments:
                                 st.text(f"{c_user}: {c_text}")
                             
                             if st.session_state['logged_in']:
-                                # Add new comment
                                 new_comment = st.text_input(f"Write an offer for {row['title']}", key=f"c_{row['id']}")
                                 if st.button("Post", key=f"btn_{row['id']}"):
                                     if new_comment:
@@ -280,11 +274,10 @@ def main():
                             else:
                                 st.caption("Log in to post offers.")
 
-    # -- TAB 2: SELL ITEM (Only if logged in) --
+    # -- TAB 2: SELL ITEM --
     if st.session_state['logged_in']:
         with tab2:
             st.header("List a New Item")
-            
             with st.form("sell_form", clear_on_submit=True):
                 title = st.text_input("Item Title")
                 desc = st.text_area("Description")
@@ -295,9 +288,7 @@ def main():
                 
                 if submitted:
                     if title and price > 0:
-                        # Use the logged-in user's phone number automatically
                         user_phone = st.session_state['user_phone']
-                        
                         create_item(st.session_state['username'], title, desc, price, user_phone, photo)
                         st.balloons()
                         st.success("Item listed successfully!")
@@ -306,7 +297,7 @@ def main():
                     else:
                         st.error("Please provide a title and price.")
 
-    # -- TAB 3: PROFILE (Only if logged in) --
+    # -- TAB 3: PROFILE --
     if st.session_state['logged_in']:
         with tab3:
             st.header("My Profile")
