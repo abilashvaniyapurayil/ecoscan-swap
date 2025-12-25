@@ -64,7 +64,7 @@ def signup_user(display_name, password, phone_input, country_code):
     c = conn.cursor()
     
     clean_phone = sanitize_phone(phone_input)
-    clean_pass = password.strip() # Remove leading/trailing spaces
+    clean_pass = password.strip() 
     clean_name = display_name.strip()
     
     try:
@@ -82,7 +82,7 @@ def check_login(phone_input, password):
     c = conn.cursor()
     
     clean_phone = sanitize_phone(phone_input)
-    clean_pass = password.strip() # Remove leading/trailing spaces
+    clean_pass = password.strip() 
     
     c.execute("SELECT display_name, country_code FROM users WHERE phone_id=? AND password=?", (clean_phone, clean_pass))
     result = c.fetchone()
@@ -146,6 +146,7 @@ def show_welcome_modal():
         st.caption("— Digital Endurance Team")
     
     st.divider()
+    # When this button is clicked, we update state AND rerun to close modal immediately
     if st.button("Continue to App", type="primary", use_container_width=True):
         st.session_state['has_seen_welcome'] = True
         st.rerun()
@@ -176,6 +177,7 @@ def main():
         st.rerun()
     st.session_state['last_active'] = time.time()
 
+    # --- INITIALIZE STATE ---
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
         st.session_state['user_phone_id'] = None
@@ -185,7 +187,9 @@ def main():
     if 'has_seen_welcome' not in st.session_state:
         st.session_state['has_seen_welcome'] = False
 
-    if not st.session_state['has_seen_welcome']:
+    # --- SHOW WELCOME MODAL (ONCE PER SESSION) ---
+    # Only show if they haven't seen it AND they aren't logged in yet
+    if not st.session_state['has_seen_welcome'] and not st.session_state['logged_in']:
         show_welcome_modal()
 
     # =========================================================
@@ -211,7 +215,6 @@ def main():
                 st.write("")
                 st.info("Log in with your Mobile Number (No Country Code).")
                 
-                # Explicit label to avoid confusion
                 login_phone = st.text_input("Mobile Number (e.g., 55512345)", key="login_phone")
                 login_pass = st.text_input("Password", type="password", key="login_pass")
                 st.write("")
@@ -223,6 +226,7 @@ def main():
                         st.session_state['user_phone_id'] = user_data['phone_id']
                         st.session_state['display_name'] = user_data['display_name']
                         st.session_state['country_code'] = user_data['country_code']
+                        # Ensure welcome message is marked as seen so it doesn't pop up later
                         st.session_state['has_seen_welcome'] = True
                         st.rerun()
                     else:
@@ -245,7 +249,6 @@ def main():
 
                 if st.button("Create Account", use_container_width=True):
                     if new_name and new_pass and new_phone:
-                        # Attempt to register
                         success = signup_user(new_name, new_pass, new_phone, country_code)
                         if success:
                             st.success("Account created! Please switch to the Login tab.")
@@ -258,13 +261,19 @@ def main():
     # VIEW B: LOGGED IN
     # =========================================================
     else:
+        # --- SIDEBAR (LOGOUT & INFO) ---
         with st.sidebar:
             st.image("founder.jpeg", width=80)
             st.write(f"Welcome, **{st.session_state['display_name']}**")
             st.caption(f"ID: {st.session_state['user_phone_id']}")
             st.divider()
-            if st.button("Log Out", type="primary"):
-                st.session_state.clear()
+            
+            # LOGOUT BUTTON
+            if st.button("🚪 Log Out", type="primary", use_container_width=True):
+                # We clear the specific keys to reset the app state
+                st.session_state['logged_in'] = False
+                st.session_state['user_phone_id'] = None
+                st.session_state['has_seen_welcome'] = False # Reset this so next user sees it
                 st.rerun()
 
         tab1, tab2, tab3 = st.tabs(["🛍️ Buy", "➕ Sell", "👤 Profile"])
@@ -295,7 +304,6 @@ def main():
                             if row['owner_phone'] == st.session_state['user_phone_id']:
                                 st.caption("👤 *You listed this item*")
                             else:
-                                # Construct clean Full WhatsApp Number
                                 full_wa_num = str(row['country_code']).replace("+","") + str(row['owner_phone'])
                                 wa_message = f"Hi, I am interested in: {row['title']}"
                                 wa_link = f"https://wa.me/{full_wa_num}?text={wa_message.replace(' ', '%20')}"
