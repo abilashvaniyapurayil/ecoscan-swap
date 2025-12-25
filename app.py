@@ -5,7 +5,7 @@ import time
 import uuid
 import re
 
-# --- 1. Database Functions (Standard) ---
+# --- 1. Database Functions ---
 def init_db():
     conn = sqlite3.connect('marketplace.db')
     c = conn.cursor()
@@ -52,7 +52,12 @@ def create_item(user, title, description, price, contact, image):
     c = conn.cursor()
     item_id = str(uuid.uuid4())
     image_name = image.name if image else "placeholder.png"
-    c.execute("INSERT INTO items (id, user, title, description, price, contact, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)", (item_id, user, title, description, price, contact, image_name))
+    
+    # Split long line for safety
+    sql = "INSERT INTO items (id, user, title, description, price, contact, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    val = (item_id, user, title, description, price, contact, image_name)
+    
+    c.execute(sql, val)
     conn.commit()
     conn.close()
 
@@ -66,11 +71,96 @@ def add_comment(item_id, user, comment_text):
     conn = get_db_connection()
     c = conn.cursor()
     comment_id = str(uuid.uuid4())
-    c.execute("INSERT INTO comments (id, item_id, user, comment) VALUES (?, ?, ?, ?)", (comment_id, item_id, user, comment_text))
+    
+    sql = "INSERT INTO comments (id, item_id, user, comment) VALUES (?, ?, ?, ?)"
+    val = (comment_id, item_id, user, comment_text)
+    
+    c.execute(sql, val)
     conn.commit()
     conn.close()
 
 def get_comments(item_id):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT user, comment, timestamp FROM comments WHERE item_id=? ORDER BY timestamp ASC",*
+    
+    # Fixed the line that was causing the error
+    sql = "SELECT user, comment, timestamp FROM comments WHERE item_id=? ORDER BY timestamp ASC"
+    c.execute(sql, (item_id,))
+    
+    data = c.fetchall()
+    conn.close()
+    return data
+
+# --- 2. Main App Logic ---
+
+def main():
+    st.set_page_config(page_title="EcoScan Market", page_icon="📱", layout="wide")
+    
+    # Hide standard Streamlit header/footer
+    hide_st_style = """
+                <style>
+                #MainMenu {visibility: hidden;}
+                footer {visibility: hidden;}
+                header {visibility: hidden;}
+                </style>
+                """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+
+    init_db()
+
+    # --- SESSION TIMEOUT LOGIC ---
+    TIMEOUT_SECONDS = 1800 
+    if 'last_active' not in st.session_state:
+        st.session_state['last_active'] = time.time()
+    if time.time() - st.session_state['last_active'] > TIMEOUT_SECONDS:
+        st.session_state.clear()
+        st.session_state['last_active'] = time.time()
+        st.rerun()
+    st.session_state['last_active'] = time.time()
+
+    # Initialize Session State
+    if 'logged_in' not in st.session_state:
+        st.session_state['logged_in'] = False
+        st.session_state['username'] = None
+        st.session_state['user_phone'] = None
+
+    # =========================================================
+    # VIEW A: LOGGED OUT (Main Screen = Login & Founder Msg)
+    # =========================================================
+    if not st.session_state['logged_in']:
+        
+        st.markdown("<h1 style='text-align: center;'>📱 EcoScan Market</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Welcome to the Community!</p>", unsafe_allow_html=True)
+        st.divider()
+
+        col1, col2 = st.columns([1, 1])
+
+        # --- LEFT COLUMN: Login/Signup ---
+        with col1:
+            st.info("Please Login or Sign Up to view the market.")
+            tab_login, tab_signup = st.tabs(["🔐 Login", "📝 Sign Up"])
+            
+            with tab_login:
+                login_user = st.text_input("Username", key="login_user")
+                login_pass = st.text_input("Password", type="password", key="login_pass")
+                if st.button("Log In", use_container_width=True):
+                    phone_found = check_login(login_user, login_pass)
+                    if phone_found:
+                        st.session_state['logged_in'] = True
+                        st.session_state['username'] = login_user
+                        st.session_state['user_phone'] = phone_found
+                        st.rerun()
+                    else:
+                        st.error("Incorrect username or password")
+            
+            with tab_signup:
+                new_user = st.text_input("New Username")
+                new_pass = st.text_input("New Password", type="password")
+                c_code, c_num = st.columns([1, 2])
+                with c_code:
+                    country_code = st.selectbox("Code", ["+965", "+966", "+971", "+974", "+20", "+1", "+44"])
+                with c_num:
+                    new_phone = st.text_input("Mobile Number")
+
+                if st.button("Sign Up", use_container_width=True):
+                    if new_user and new_pass and new_phone:*
