@@ -289,4 +289,17 @@ def main():
             
             # --- THE FOUNDER MESSAGE (PERMANENT HOME) ---
             with st.expander("👋 About EcoScan / Founder Message", expanded=True):
-                c1, c2 =*
+                c1, c2 = st.columns([1, 3])
+                with c1:
+                    try:
+                        st.image("founder.jpeg", use_container_width=True)
+                    except:
+                        st.write("📷")
+                with c2:
+                    st.write("### Welcome, Community Member!")
+                    st.write("We built this platform to make buying and selling simple, transparent, and direct.")
+                    st.write("Our goal is to reduce waste and help you find great value in your local community.")
+                    st.caption("— Digital Endurance Team")
+
+if __name__ == "__main__":
+    main()
