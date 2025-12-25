@@ -1,287 +1,318 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
-import json
-import os
-import base64
-import urllib.parse
-from PIL import Image
-from io import BytesIO
-from datetime import datetime
+import time
+import uuid
+import re  # For regex (phone validation)
 
-# --- 1. CONFIG & APP STORE META ---
-st.set_page_config(page_title="EcoScan Kuwait", page_icon="🌱", layout="centered")
-
-# CSS to make it look like a mobile app
-st.markdown("""
-    <style>
-    .stApp { background-color: #F1F8E9; }
-    .main-banner {
-        background-color: #2E7D32; color: white; padding: 20px;
-        border-radius: 15px; text-align: center; margin-bottom: 20px;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-    }
-    .profile-card {
-        background-color: white; padding: 20px; border-radius: 10px;
-        box-shadow: 0px 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px;
-    }
-    .stButton>button { width: 100%; border-radius: 20px; height: 3em; }
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 2. DATABASE ENGINE ---
-USER_DB = "users_db.json"
-ITEM_DB = "items_db.json"
-
-# Common Country Codes for Kuwait Expats
-COUNTRY_CODES = [
-    "+965 (Kuwait)", 
-    "+966 (Saudi Arabia)", 
-    "+971 (UAE)", 
-    "+974 (Qatar)", 
-    "+973 (Bahrain)",
-    "+968 (Oman)",
-    "+20 (Egypt)", 
-    "+91 (India)", 
-    "+63 (Philippines)", 
-    "+880 (Bangladesh)", 
-    "+92 (Pakistan)",
-    "+961 (Lebanon)",
-    "+962 (Jordan)",
-    "+1 (USA/Canada)",
-    "+44 (UK)",
-    "Other"
-]
-
-def load_data(file):
-    if os.path.exists(file):
-        with open(file, "r") as f:
-            try: return json.load(f)
-            except: return []
-    return []
-
-def save_data(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=4)
-
-def image_to_base64(image_file):
-    if image_file:
-        return base64.b64encode(image_file.getvalue()).decode()
-    return None
-
-def base64_to_image(base64_string):
-    if base64_string:
-        try: return Image.open(BytesIO(base64.b64decode(base64_string)))
-        except: return None
-    return None
-
-# Helper: Extract just the numbers for the WhatsApp Link
-def clean_phone_for_wa(full_phone_string):
-    # This turns "+965 12345678" into "96512345678"
-    return ''.join(filter(str.isdigit, str(full_phone_string)))
-
-# --- 3. SESSION LOGIC ---
-if "user" not in st.session_state: st.session_state.user = None
-if "view" not in st.session_state: st.session_state.view = "login"
-
-# --- 4. APP CONTENT ---
-if st.session_state.user:
-    # --- LOGGED IN AREA ---
-    is_admin = st.session_state.user.get("role") == "admin"
-    st.markdown(f'<div class="main-banner"><h1>EcoScan Kuwait</h1><p>Welcome, {st.session_state.user["name"]}</p></div>', unsafe_allow_html=True)
+# --- 1. Database Functions ---
+def init_db():
+    conn = sqlite3.connect('marketplace.db')
+    c = conn.cursor()
     
-    tabs = st.tabs(["📤 Post Item", "📱 Community Feed", "👤 Profile"])
+    # Users table
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (username TEXT PRIMARY KEY, password TEXT, phone TEXT)''')
+    
+    # Items table
+    c.execute('''CREATE TABLE IF NOT EXISTS items
+                 (id TEXT PRIMARY KEY, 
+                  user TEXT, 
+                  title TEXT, 
+                  description TEXT, 
+                  price REAL, 
+                  contact TEXT,
+                  image_path TEXT,
+                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
-    # --- TAB 1: POST ITEM ---
-    with tabs[0]:
-        st.subheader("List an Item")
-        with st.form("post_form", clear_on_submit=True):
-            i_name = st.text_input("Item Name")
-            i_cat = st.selectbox("Category", ["Furniture", "Electronics", "Clothing", "Books", "Vehicles", "Other"])
-            i_desc = st.text_area("Description")
-            i_image = st.file_uploader("Add Photo", type=["jpg", "png", "jpeg"])
-            
-            if st.form_submit_button("Post to Marketplace"):
-                if i_name:
-                    items = load_data(ITEM_DB)
-                    img_str = image_to_base64(i_image)
-                    
-                    new_item = {
-                        "id": str(datetime.now().timestamp()), 
-                        "name": i_name, 
-                        "cat": i_cat,
-                        "desc": i_desc,
-                        "image": img_str,
-                        "user": st.session_state.user['name'],
-                        "phone": st.session_state.user['phone'], 
-                        "area": st.session_state.user['area'],
-                        "messages": [] 
-                    }
-                    items.append(new_item)
-                    save_data(ITEM_DB, items)
-                    st.success("Item posted successfully!")
-                else:
-                    st.error("Item name is required.")
+    # Comments/Offers table
+    c.execute('''CREATE TABLE IF NOT EXISTS comments
+                 (id TEXT PRIMARY KEY,
+                  item_id TEXT,
+                  user TEXT,
+                  comment TEXT,
+                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    
+    conn.commit()
+    conn.close()
 
-    # --- TAB 2: FEED (CHAT & OFFERS) ---
-    with tabs[1]:
-        st.subheader("Marketplace")
-        search_query = st.text_input("🔍 Search items...", key="search_main")
+def get_db_connection():
+    return sqlite3.connect('marketplace.db', check_same_thread=False)
+
+# --- 2. Helper Functions ---
+
+def sanitize_phone(phone_number, country_code):
+    """
+    Cleans phone number: removes spaces/dashes, ensures it starts with country code.
+    Example: Input (123 45678, +965) -> Output 96512345678
+    """
+    if not phone_number:
+        return None
+    
+    # Remove all non-numeric characters
+    clean_num = re.sub(r'\D', '', phone_number)
+    
+    # Remove the country code if the user typed it manually to avoid duplication
+    # (e.g., if user typed 96512345, we don't want to add 965 again to make 965965...)
+    clean_code = re.sub(r'\D', '', country_code)
+    
+    if clean_num.startswith(clean_code):
+        return clean_num
+    else:
+        return clean_code + clean_num
+
+def signup_user(username, password, phone, country_code):
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    final_phone = sanitize_phone(phone, country_code)
+    
+    try:
+        c.execute("INSERT INTO users (username, password, phone) VALUES (?, ?, ?)", 
+                  (username, password, final_phone))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def check_login(username, password):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT password, phone FROM users WHERE username=?", (username,))
+    result = c.fetchone()
+    conn.close()
+    
+    if result and result[0] == password:
+        return result[1] # Return the phone number
+    return None
+
+def create_item(user, title, description, price, contact, image):
+    conn = get_db_connection()
+    c = conn.cursor()
+    item_id = str(uuid.uuid4())
+    
+    # In a real app, you would save the 'image' file to disk or cloud storage (S3).
+    # For this MVP, we will assume 'image' is just the filename or we skip saving binary data to DB for simplicity.
+    # We will just store the filename if provided.
+    image_name = image.name if image else "placeholder.png"
+    
+    c.execute("INSERT INTO items (id, user, title, description, price, contact, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              (item_id, user, title, description, price, contact, image_name))
+    conn.commit()
+    conn.close()
+
+def get_items():
+    conn = get_db_connection()
+    df = pd.read_sql_query("SELECT * FROM items ORDER BY timestamp DESC", conn)
+    conn.close()
+    return df
+
+def add_comment(item_id, user, comment_text):
+    conn = get_db_connection()
+    c = conn.cursor()
+    comment_id = str(uuid.uuid4())
+    c.execute("INSERT INTO comments (id, item_id, user, comment) VALUES (?, ?, ?, ?)",
+              (comment_id, item_id, user, comment_text))
+    conn.commit()
+    conn.close()
+
+def get_comments(item_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT user, comment, timestamp FROM comments WHERE item_id=? ORDER BY timestamp ASC", (item_id,))
+    data = c.fetchall()
+    conn.close()
+    return data
+
+# --- 3. Main App Logic ---
+
+def main():
+    st.set_page_config(page_title="Community Market", page_icon="🛒", layout="wide")
+    
+    # Hide Streamlit Branding
+    hide_st_style = """
+                <style>
+                #MainMenu {visibility: hidden;}
+                footer {visibility: hidden;}
+                header {visibility: hidden;}
+                </style>
+                """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+
+    init_db()
+
+    # Session State for Login
+    if 'logged_in' not in st.session_state:
+        st.session_state['logged_in'] = False
+        st.session_state['username'] = None
+        st.session_state['user_phone'] = None
+
+    # --- SIDEBAR (Login/Signup & Founder Msg) ---
+    with st.sidebar:
+        st.title("📱 EcoScan Market")
         
-        items = load_data(ITEM_DB)
-        if not items: st.info("No items yet.")
+        if not st.session_state['logged_in']:
+            tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
+            
+            with tab_login:
+                login_user = st.text_input("Username", key="login_user")
+                login_pass = st.text_input("Password", type="password", key="login_pass")
+                if st.button("Log In"):
+                    phone_found = check_login(login_user, login_pass)
+                    if phone_found:
+                        st.session_state['logged_in'] = True
+                        st.session_state['username'] = login_user
+                        st.session_state['user_phone'] = phone_found
+                        st.success(f"Welcome back, {login_user}!")
+                        st.rerun()
+                    else:
+                        st.error("Incorrect username or password")
+            
+            with tab_signup:
+                new_user = st.text_input("New Username")
+                new_pass = st.text_input("New Password", type="password")
+                
+                # Enhanced Phone Input
+                col_code, col_num = st.columns([1, 2])
+                with col_code:
+                    country_code = st.selectbox("Code", ["+965", "+966", "+971", "+974", "+20", "+1", "+44"], index=0)
+                with col_num:
+                    new_phone = st.text_input("Mobile Number")
+
+                if st.button("Sign Up"):
+                    if new_user and new_pass and new_phone:
+                        if signup_user(new_user, new_pass, new_phone, country_code):
+                            st.success("Account created! Please log in.")
+                        else:
+                            st.error("Username already exists.")
+                    else:
+                        st.warning("Please fill all fields.")
+        
+        else:
+            st.success(f"Logged in as: {st.session_state['username']}")
+            if st.button("Log Out"):
+                st.session_state['logged_in'] = False
+                st.session_state['username'] = None
+                st.session_state['user_phone'] = None
+                st.rerun()
+
+        # --- FOUNDER MESSAGE SECTION ---
+        st.divider()
+        st.subheader("👋 From the Founder")
+        
+        # Display image from root directory
+        try:
+            st.image("founder.jpeg", caption="Founder's Note", use_container_width=True)
+        except:
+            st.info("(founder.jpeg not found)")
+            
+        st.info("Welcome to our community! We built this platform to make buying and selling simple, transparent, and direct. Thank you for being a part of our journey.")
+        # -------------------------------
+
+    # --- MAIN CONTENT AREA ---
+    
+    # Define Tabs
+    if st.session_state['logged_in']:
+        tab1, tab2, tab3 = st.tabs(["🛍️ Buy Items", "➕ Sell Item", "👤 Profile"])
+    else:
+        tab1 = st.container() # Only show Buy tab if not logged in (simulated via container)
+        st.subheader("🛍️ Buy Items")
+        # If not logged in, we only show items. Sell/Profile are hidden or prompting login.
+
+    # -- TAB 1: BUY ITEMS (Feed) --
+    with tab1:
+        st.markdown("### Latest Listings")
+        
+        # Search Bar
+        search_query = st.text_input("🔍 Search items...", "")
+        
+        items = get_items()
         
         if search_query:
-            items = [i for i in items if search_query.lower() in i['name'].lower()]
+            items = items[items['title'].str.contains(search_query, case=False, na=False)]
 
-        for i in reversed(items):
-            with st.container(border=True):
-                if i.get("image"):
-                    st.image(base64_to_image(i["image"]), use_container_width=True)
-                
-                st.write(f"### {i['name']}")
-                st.write(f"**Category:** {i['cat']} | **Area:** {i['area']}")
-                if i.get("desc"): st.caption(i["desc"])
-                st.caption(f"Posted by: {i['user']}")
-
-                col1, col2 = st.columns(2)
-                
-                # Button A: WhatsApp Direct
-                with col1:
-                    raw_phone = i.get('phone', '')
-                    clean_wa = clean_phone_for_wa(raw_phone)
+        if items.empty:
+            st.info("No items found.")
+        else:
+            for index, row in items.iterrows():
+                with st.container(border=True):
+                    c1, c2 = st.columns([1, 3])
                     
-                    if clean_wa:
-                        msg_text = urllib.parse.quote(f"Hi, I am interested in your {i['name']} on EcoScan.")
-                        wa_link = f"https://wa.me/{clean_wa}?text={msg_text}"
-                        st.link_button("🟢 WhatsApp", wa_link, use_container_width=True)
-                    else:
-                        st.button("No Phone", disabled=True)
-
-                # Button B: Internal Comments
-                with col2:
-                    with st.expander(f"💬 Offers ({len(i.get('messages', []))})"):
-                        for m in i.get('messages', []):
-                            st.caption(f"**{m['by']}**: {m['text']}")
+                    with c1:
+                        # Placeholder logic for images
+                        st.image("https://via.placeholder.com/150?text=Item", use_container_width=True)
+                    
+                    with c2:
+                        st.subheader(row['title'])
+                        st.write(f"**Price:** {row['price']} KD")
+                        st.write(row['description'])
+                        st.caption(f"Seller: {row['user']} | Posted: {row['timestamp']}")
                         
-                        offer_text = st.text_input("Comment", key=f"input_{i['id']}")
-                        if st.button("Send", key=f"btn_{i['id']}"):
-                            if offer_text:
-                                all_items = load_data(ITEM_DB)
-                                for idx, db_item in enumerate(all_items):
-                                    if db_item['id'] == i['id']:
-                                        if "messages" not in db_item: db_item["messages"] = []
-                                        db_item["messages"].append({
-                                            "by": st.session_state.user['name'],
-                                            "text": offer_text
-                                        })
-                                        all_items[idx] = db_item
-                                        save_data(ITEM_DB, all_items)
+                        # --- HYBRID CONTACT BUTTONS ---
+                        col_wa, col_cmt = st.columns([1, 1])
+                        
+                        with col_wa:
+                            # WhatsApp Direct Link
+                            wa_message = f"Hi, I am interested in your item: {row['title']}"
+                            # row['contact'] is the phone number from DB
+                            wa_link = f"https://wa.me/{row['contact']}?text={wa_message.replace(' ', '%20')}"
+                            
+                            st.link_button("💬 Chat on WhatsApp", wa_link, type="primary")
+
+                        # --- INTERNAL COMMENTS SECTION ---
+                        with st.expander(f"💬 Offers & Comments ({row['id'][:4]}...)"):
+                            # Show existing comments
+                            existing_comments = get_comments(row['id'])
+                            for c_user, c_text, c_time in existing_comments:
+                                st.text(f"{c_user}: {c_text}")
+                            
+                            if st.session_state['logged_in']:
+                                # Add new comment
+                                new_comment = st.text_input(f"Write an offer for {row['title']}", key=f"c_{row['id']}")
+                                if st.button("Post", key=f"btn_{row['id']}"):
+                                    if new_comment:
+                                        add_comment(row['id'], st.session_state['username'], new_comment)
+                                        st.success("Sent!")
+                                        time.sleep(1)
                                         st.rerun()
+                            else:
+                                st.caption("Log in to post offers.")
 
-                if is_admin:
-                    if st.button("🗑️ Delete", key=f"del_{i['id']}"):
-                        items = [x for x in load_data(ITEM_DB) if x['id'] != i['id']]
-                        save_data(ITEM_DB, items)
+    # -- TAB 2: SELL ITEM (Only if logged in) --
+    if st.session_state['logged_in']:
+        with tab2:
+            st.header("List a New Item")
+            
+            with st.form("sell_form", clear_on_submit=True):
+                title = st.text_input("Item Title")
+                desc = st.text_area("Description")
+                price = st.number_input("Price (KD)", min_value=0.0, step=0.5)
+                photo = st.file_uploader("Upload Photo", type=['png', 'jpg', 'jpeg'])
+                
+                submitted = st.form_submit_button("Publish Listing")
+                
+                if submitted:
+                    if title and price > 0:
+                        # Use the logged-in user's phone number automatically
+                        user_phone = st.session_state['user_phone']
+                        
+                        create_item(st.session_state['username'], title, desc, price, user_phone, photo)
+                        st.balloons()
+                        st.success("Item listed successfully!")
+                        time.sleep(1)
                         st.rerun()
-
-    # --- TAB 3: PROFILE & LOGOUT ---
-    with tabs[2]:
-        st.subheader("Your Profile")
-        st.markdown(f"""
-        <div class="profile-card">
-            <h3>👤 {st.session_state.user['name']}</h3>
-            <p><b>📍 Area:</b> {st.session_state.user['area']}</p>
-            <p><b>📞 Contact:</b> {st.session_state.user['phone']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Log Out"):
-            st.session_state.user = None
-            st.rerun()
-
-else:
-    # --- LOGIN / SIGNUP SCREEN ---
-    st.markdown('<div class="main-banner"><h1>🌱 EcoScan Kuwait</h1></div>', unsafe_allow_html=True)
-    
-    if st.session_state.view == "login":
-        st.subheader("Login")
-        
-        # Login with Code Selector
-        col_l1, col_l2 = st.columns([1, 2])
-        with col_l1:
-            l_code = st.selectbox("Code", COUNTRY_CODES, index=0, label_visibility="collapsed")
-        with col_l2:
-            l_num = st.text_input("Phone Number", label_visibility="collapsed", placeholder="e.g. 12345678")
-            
-        u_pw = st.text_input("Password", type="password")
-        
-        if st.button("Sign In", type="primary"):
-            # Construct full phone for checking
-            full_login_phone = l_code.split(" ")[0] + l_num
-            
-            # Admin Backdoor
-            if l_num == "90000000" and u_pw == "founder2025":
-                st.session_state.user = {"name": "Founder", "phone": "+96590000000", "area": "Kuwait City", "role": "admin"}
-                st.rerun()
-                
-            users = load_data(USER_DB)
-            # Find user matching exact phone string
-            u = next((x for x in users if x['phone'] == full_login_phone and x['password'] == u_pw), None)
-            
-            if u: 
-                st.session_state.user = u
-                st.rerun()
-            else: 
-                # Fallback: Try checking just the number in case old users exist
-                u_alt = next((x for x in users if l_num in x['phone'] and x['password'] == u_pw), None)
-                if u_alt:
-                    st.session_state.user = u_alt
-                    st.rerun()
-                else:
-                    st.error("Invalid phone or password.")
-                    
-        if st.button("Create Account"):
-            st.session_state.view = "signup"
-            st.rerun()
-        
-    else:
-        st.subheader("Create Account")
-        with st.form("signup_form"):
-            s_name = st.text_input("Full Name")
-            
-            # Country Code Selector for Signup
-            st.write("WhatsApp Number")
-            col_s1, col_s2 = st.columns([1, 2])
-            with col_s1:
-                s_code = st.selectbox("Country Code", COUNTRY_CODES, index=0) # Default +965
-            with col_s2:
-                s_num = st.text_input("Mobile Number", placeholder="e.g. 12345678")
-                
-            s_area = st.selectbox("Area", ["Kuwait City", "Salmiya", "Hawalli", "Jahra", "Fahaheel", "Mangaf", "Other"])
-            s_pw = st.text_input("Create Password", type="password")
-            
-            if st.form_submit_button("Register"):
-                if s_name and s_num and s_pw:
-                    # Combine Code and Number: e.g. "+965" + "12345678" -> "+96512345678"
-                    # We strip the country name text from the selectbox first (e.g. " (Kuwait)")
-                    clean_code = s_code.split(" ")[0]
-                    full_phone = clean_code + s_num
-                    
-                    users = load_data(USER_DB)
-                    if any(u['phone'] == full_phone for u in users):
-                        st.error("Number already registered.")
                     else:
-                        users.append({"name": s_name, "phone": full_phone, "area": s_area, "password": s_pw, "role": "user"})
-                        save_data(USER_DB, users)
-                        st.success("Account created! Go to login.")
-                        st.session_state.view = "login"
-                        st.rerun()
-                else: 
-                    st.warning("Please fill all fields.")
-        
-        if st.button("Back to Login"):
-            st.session_state.view = "login"
-            st.rerun()
+                        st.error("Please provide a title and price.")
+
+    # -- TAB 3: PROFILE (Only if logged in) --
+    if st.session_state['logged_in']:
+        with tab3:
+            st.header("My Profile")
+            st.write(f"**Username:** {st.session_state['username']}")
+            st.write(f"**Registered Phone:** {st.session_state['user_phone']}")
+            st.info("Your phone number is hidden from public view, but the WhatsApp button on your items will link to it.")
+
+if __name__ == "__main__":
+    main()
