@@ -68,7 +68,7 @@ def signup_user(display_name, password, phone_input, country_code):
         conn.commit()
         return True
     except sqlite3.IntegrityError:
-        return False # Duplicate phone
+        return False  # Duplicate phone
     finally:
         conn.close()
 
@@ -350,7 +350,7 @@ def main():
         with tab_about:
             st.header("About Us")
             st.write("### Founders:")
-            st.image("https://raw.githubusercontent.com/yourusername/yourrepo/main/founder.jpeg", width=150)  # Update with your actual GitHub image URL
+            st.image("https://raw.githubusercontent.com/abilashvaniyapurayil/ecoscan-kuwait/main/founder.jpeg", width=150)  # Correct URL for the founder's image
             st.write("**Dr. Abhilash Babu Vaniyapurayil** - Founder")
 
             st.write("### Company Details:")
