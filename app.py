@@ -21,7 +21,7 @@ def init_db():
                     country_code TEXT
                 )''')
     
-    # Items table
+    # Items table with an additional location field
     c.execute('''CREATE TABLE IF NOT EXISTS items (
                     id TEXT PRIMARY KEY, 
                     owner_phone TEXT, 
@@ -30,6 +30,7 @@ def init_db():
                     description TEXT, 
                     price REAL, 
                     country_code TEXT,
+                    location TEXT,  -- Add this line for location
                     image_path TEXT, 
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )''')
@@ -87,14 +88,14 @@ def check_login(phone_input, password):
         return {"display_name": result[0], "country_code": result[1], "phone_id": clean_phone}
     return None
 
-def create_item(owner_phone, owner_name, title, description, price, country_code, image):
+def create_item(owner_phone, owner_name, title, description, price, country_code, location, image):
     conn = get_db_connection()
     c = conn.cursor()
     item_id = str(uuid.uuid4())
     image_name = image.name if image else "placeholder.png"
     
-    sql = "INSERT INTO items (id, owner_phone, owner_name, title, description, price, country_code, image_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    val = (item_id, owner_phone, owner_name, title, description, price, country_code, image_name)
+    sql = "INSERT INTO items (id, owner_phone, owner_name, title, description, price, country_code, location, image_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    val = (item_id, owner_phone, owner_name, title, description, price, country_code, location, image_name)
     c.execute(sql, val)
     conn.commit()
     conn.close()
@@ -280,6 +281,7 @@ def main():
                             st.subheader(row['title'])
                             st.write(f"**{row['price']} KD**")
                             st.write(f"{row['description']}")
+                            st.write(f"**Location:** {row['location']}")  # Display the seller's location
                             st.caption(f"Seller: {row['owner_name']}")
                             
                             if row['owner_phone'] == st.session_state['user_phone_id']:
@@ -309,10 +311,11 @@ def main():
                 title = st.text_input("Title")
                 desc = st.text_area("Description")
                 price = st.number_input("Price (KD)", min_value=0.0, step=0.5)
+                location = st.text_input("Location")  # New location input field
                 photo = st.file_uploader("Photo", type=['png', 'jpg', 'jpeg'])
                 
                 if st.form_submit_button("Publish", use_container_width=True):
-                    if title and price > 0:
+                    if title and price > 0 and location:  # Ensure location is provided
                         create_item(
                             st.session_state['user_phone_id'], 
                             st.session_state['display_name'], 
@@ -320,6 +323,7 @@ def main():
                             desc, 
                             price, 
                             st.session_state['country_code'], 
+                            location,  # Pass the location to the create_item function
                             photo
                         )
                         st.balloons()
@@ -327,7 +331,7 @@ def main():
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error("Title & Price required.")
+                        st.error("Title, Price, and Location are required.")
 
         # -- TAB 3: PROFILE --
         with tab3:
